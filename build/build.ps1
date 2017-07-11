@@ -9,7 +9,8 @@ param (
 	[string]$MavenRepo = "$($env:USERPROFILE)\.m2",
 	[switch]$SkipMaven,
 	[switch]$SkipKeyCheck,
-	[switch]$GenerateTests
+	[switch]$GenerateTests,
+    [switch]$Validate
 )
 
 # build the solutions
@@ -168,6 +169,32 @@ ForEach ($package in $packages) {
 
 	&$nuget 'pack' ".\$package.nuspec" '-OutputDirectory' 'nuget' '-Prop' "Configuration=$BuildConfig" '-Version' "$AntlrVersion" '-Prop' "M2_REPO=$M2_REPO" '-Prop' "CSharpToolVersion=$CSharpToolVersion" '-Symbols'
 	if (-not $?) {
+		Exit $LASTEXITCODE
+	}
+}
+
+If ($Validate) {
+	&$msbuild '/nologo' '/m' '/nr:false' '/t:Rebuild' $LoggerArgument "/verbosity:$Verbosity" "/p:Configuration=$BuildConfig" '.\DotnetValidation\DotnetValidation.sln'
+	if (-not $?) {
+		$host.ui.WriteErrorLine('Build failed, aborting!')
+		Exit $LASTEXITCODE
+	}
+
+	".\DotnetValidation\bin\$BuildConfig\net45\DotnetValidation.exe"
+	if (-not $?) {
+		$host.ui.WriteErrorLine('Build failed, aborting!')
+		Exit $LASTEXITCODE
+	}
+
+	&$msbuild '/nologo' '/m' '/nr:false' '/t:Clean' $LoggerArgument "/verbosity:$Verbosity" "/p:Configuration=$BuildConfig" '.\DotnetValidation\DotnetValidation.sln'
+	if (-not $?) {
+		$host.ui.WriteErrorLine('Build failed, aborting!')
+		Exit $LASTEXITCODE
+	}
+
+	dotnet 'run' '--project' '.\DotnetValidation\DotnetValidation.csproj' '--framework' 'netcoreapp2.0'
+	if (-not $?) {
+		$host.ui.WriteErrorLine('Build failed, aborting!')
 		Exit $LASTEXITCODE
 	}
 }
